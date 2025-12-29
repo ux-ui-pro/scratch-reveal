@@ -1,0 +1,27 @@
+.sr {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+}
+
+.sr__bg {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.sr__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+scratch-reveal {
+  display: inline-block;
+  width: 100%;
+  height: 100%;
+}

@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>scratch-reveal • dev</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        background-color: #121212;
+        font-family: "Inter", system-ui, -apple-system, sans-serif;
+        display: flex;
+        justify-content: center;
+        padding: 48px 16px;
+      }
+
+      .page {
+        text-align: center;
+      }
+
+      .scratch-wrap {
+        width: min(100vw - 30px, 450px) !important;
+        margin: auto;
+        aspect-ratio: 1;
+        overflow: hidden;
+      }
+
+      .progress-text {
+        display: inline-block;
+        margin-bottom: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <span class="progress-text">Осталось стереть…</span>
+
+      <div class="scratch-wrap">
+        <scratch-reveal
+          percent-to-finish="60"
+          brush-size="25%"
+          brush-src="/demo/assets/scratch-reveal-brush.png"
+          mask-src="/demo/assets/scratch-reveal-mask.webp"
+          background-src="/demo/assets/scratch-reveal-background.svg"
+        ></scratch-reveal>
+      </div>
+    </main>
+
+    <script type="module">
+      import { registerScratchRevealElement } from '/src/scratch-reveal.ts';
+      // import '/src/scratch-reveal.css';
+
+      registerScratchRevealElement();
+
+      const el = document.querySelector('scratch-reveal');
+      const progressText = document.querySelector('.progress-text');
+
+      const percentToFinish = Number(el?.getAttribute('percent-to-finish') ?? 60);
+
+      const setRemaining = (clearedPercent) => {
+        if (!progressText) return;
+        const remaining = Math.max(0, percentToFinish - clearedPercent);
+        const remainingRounded = Math.round(remaining);
+        progressText.textContent = `Осталось стереть ${remainingRounded}%`;
+      };
+
+      setRemaining(0);
+
+      el.addEventListener('progress', (event) => {
+        setRemaining(event.detail.percent);
+      });
+
+      el.addEventListener('complete', () => {
+        setRemaining(percentToFinish);
+        console.log('ScratchReveal: завершено');
+      });
+    </script>
+  </body>
+</html>
