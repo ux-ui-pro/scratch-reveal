@@ -1,6 +1,6 @@
 import Brush from './internal/Brush';
 import { ScratchRevealOptions } from './options';
-import { getOffset, loadImage, rafThrottle } from './internal/utils';
+import { loadImage, rafThrottle } from './internal/utils';
 import DEFAULT_CSS_TEXT from './scratch-reveal.css?raw';
 
 export const scratchRevealCssText = DEFAULT_CSS_TEXT;
@@ -49,7 +49,6 @@ class ScratchReveal {
   private percent = 0;
   private done = false;
   private destroyed = false;
-  private zone = { top: 0, left: 0 };
   private removeListeners?: () => void;
 
   get canvas(): HTMLCanvasElement {
@@ -90,7 +89,6 @@ class ScratchReveal {
 
     this.drawMask();
     this.setBackground();
-    this.zone = getOffset(this._canvas);
     this.bindEvents();
     return this;
   }
@@ -123,11 +121,9 @@ class ScratchReveal {
     this._canvas.width = width;
     this._canvas.height = height;
 
-    // Resizing canvas resets its state, so restore mask.
     this.percent = 0;
     this.ctx.globalCompositeOperation = 'source-over';
     this.drawMask();
-    this.zone = getOffset(this._canvas);
   }
 
   setBrushSize(size: number) {
@@ -149,13 +145,11 @@ class ScratchReveal {
 
     const onPointerDown = (event: PointerEvent) => {
       event.preventDefault();
-      this.zone = getOffset(this._canvas);
       this.updatePosition(event);
       this.scratch();
       this._canvas.setPointerCapture(event.pointerId);
       this._canvas.addEventListener('pointermove', onPointerMove);
 
-      // In case the first scratch already reaches the threshold, finish immediately
       if (this.config.enabledPercentUpdate) {
         this.percent = this.updatePercent();
         this.config.onProgress?.(this.percent);
@@ -180,8 +174,11 @@ class ScratchReveal {
   }
 
   private updatePosition(event: PointerEvent) {
-    const x = event.clientX - this.zone.left;
-    const y = event.clientY - this.zone.top;
+    const rect = this._canvas.getBoundingClientRect();
+    const scaleX = rect.width ? this._canvas.width / rect.width : 1;
+    const scaleY = rect.height ? this._canvas.height / rect.height : 1;
+    const x = (event.clientX - rect.left) * scaleX;
+    const y = (event.clientY - rect.top) * scaleY;
     this.brush.updateMousePosition(x, y);
   }
 
@@ -196,7 +193,6 @@ class ScratchReveal {
     if (this.destroyed) return;
     if (!this.backgroundImage) return;
 
-    // Ensure canvas is still attached (it can be detached if the element was rebuilt).
     if (!this.container.contains(this._canvas)) return;
 
     const image = this.backgroundEl ?? document.createElement('img');
@@ -234,8 +230,6 @@ class ScratchReveal {
       this._canvas.style.pointerEvents = 'none';
       this.config.onComplete?.();
 
-      // If we finished during a pointer interaction (e.g. while holding LMB),
-      // cleanly stop tracking and release pointer capture immediately.
       if (event && onPointerMove) {
         try {
           this._canvas.releasePointerCapture(event.pointerId);
@@ -257,10 +251,8 @@ export function registerScratchRevealElement(tagName = 'scratch-reveal') {
   if (customElements.get(tagName)) return;
 
   function parseEnabledPercentUpdate(value: string | null, fallback: boolean): boolean {
-    // Not provided -> fallback
     if (value === null) return fallback;
     const v = value.trim().toLowerCase();
-    // Boolean attribute without value -> "" => true
     if (v === '') return true;
     if (v === 'false' || v === '0' || v === 'no' || v === 'off') return false;
     if (v === 'true' || v === '1' || v === 'yes' || v === 'on') return true;
@@ -277,7 +269,6 @@ export function registerScratchRevealElement(tagName = 'scratch-reveal') {
     const v = value.trim();
     if (!v) return fallbackPx;
 
-    // Percent of min(canvasWidth, canvasHeight)
     if (v.endsWith('%')) {
       const n = Number.parseFloat(v.slice(0, -1));
       if (!Number.isFinite(n)) return fallbackPx;
@@ -285,7 +276,6 @@ export function registerScratchRevealElement(tagName = 'scratch-reveal') {
       return Math.max(0, (basis * n) / 100);
     }
 
-    // px (optional suffix)
     const px = v.endsWith('px') ? Number.parseFloat(v.slice(0, -2)) : Number.parseFloat(v);
     return Number.isFinite(px) ? Math.max(0, px) : fallbackPx;
   }
@@ -358,13 +348,14 @@ export function registerScratchRevealElement(tagName = 'scratch-reveal') {
       const hasWidthAttr = this.hasAttribute('width');
       const hasHeightAttr = this.hasAttribute('height');
 
-      // If width/height are not provided, auto-size based on the host element box.
       const hostRect = this.getBoundingClientRect();
       const autoWidth = Math.round(hostRect.width);
       const autoHeight = Math.round(hostRect.height);
 
       const width = hasWidthAttr ? Number(this.getAttribute('width')) : autoWidth || DEFAULTS.width;
-      const height = hasHeightAttr ? Number(this.getAttribute('height')) : autoHeight || DEFAULTS.height;
+      const height = hasHeightAttr
+        ? Number(this.getAttribute('height'))
+        : autoHeight || DEFAULTS.height;
       const percentToFinish = Number(
         this.getAttribute('percent-to-finish') ?? DEFAULTS.percentToFinish,
       );
@@ -382,8 +373,6 @@ export function registerScratchRevealElement(tagName = 'scratch-reveal') {
       const imageMaskSrc = this.getAttribute('mask-src') ?? DEFAULTS.imageMaskSrc;
       const imageBackgroundSrc = this.getAttribute('background-src') ?? DEFAULTS.imageBackgroundSrc;
 
-      // Only force an explicit size when user provided width/height attributes.
-      // Otherwise, let layout/CSS define the host size and we will observe it.
       if (hasWidthAttr) this.container.style.width = `${width}px`;
       else this.container.style.width = '100%';
       if (hasHeightAttr) this.container.style.height = `${height}px`;
@@ -408,12 +397,10 @@ export function registerScratchRevealElement(tagName = 'scratch-reveal') {
 
       this.instance.init();
 
-      // Auto-resize to host changes if width/height attributes are not used.
       const needsAutoSize = !hasWidthAttr || !hasHeightAttr;
       if (needsAutoSize && 'ResizeObserver' in window) {
         this.resizeObserver?.disconnect();
         this.resizeObserver = new ResizeObserver(() => {
-          // If attributes were added later, stop auto sizing.
           if (this.hasAttribute('width') && this.hasAttribute('height')) {
             this.resizeObserver?.disconnect();
             this.resizeObserver = undefined;

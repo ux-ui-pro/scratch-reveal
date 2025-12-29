@@ -60,6 +60,7 @@ app.mount('#app');
 </div>
 ```
 — If `width`/`height` attributes are omitted, the component will observe its own size and resize the canvas accordingly.
+
 <br>
 
 ➠ **Events**
@@ -74,6 +75,7 @@ el.addEventListener('complete', () => {
 ```
 — `progress` (detail: `{ percent: number }`)  
 — `complete` (detail: `{ percent: 100 }`)
+
 <br>
 
 ➠ **Attributes**
