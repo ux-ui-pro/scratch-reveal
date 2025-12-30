@@ -50,8 +50,6 @@ class ScratchReveal {
   private completing = false;
   private destroyed = false;
   private lastProgressEmitMs = 0;
-  private lastScratchX?: number;
-  private lastScratchY?: number;
   private removeListeners?: () => void;
 
   get canvas(): HTMLCanvasElement {
@@ -175,7 +173,6 @@ class ScratchReveal {
       this.scratch();
       this._canvas.setPointerCapture(event.pointerId);
       this._canvas.addEventListener('pointermove', onPointerMove);
-      this.resetScratchTrail();
 
       this.percent = this.updatePercent();
       this.config.onProgress?.(this.percent);
@@ -183,7 +180,6 @@ class ScratchReveal {
     };
 
     const onPointerUp = (event: PointerEvent) => {
-      this.resetScratchTrail();
       this.percent = this.updatePercent();
       this.config.onProgress?.(this.percent);
       this.finish(event, onPointerMove);
@@ -234,31 +230,11 @@ class ScratchReveal {
 
   private scratch() {
     if (!this.brushImage) return;
-    const sizeBase =
-      this.brushSize > 0
-        ? this.brushSize
-        : Math.max(1, Math.min(this.brushImage.width, this.brushImage.height));
-    const spacing = Math.max(2, sizeBase * 0.4);
-    if (this.lastScratchX !== undefined && this.lastScratchY !== undefined) {
-      const dx = this.brush.mouseX - this.lastScratchX;
-      const dy = this.brush.mouseY - this.lastScratchY;
-      if (dx * dx + dy * dy < spacing * spacing) {
-        return;
-      }
-    }
-
     const effectiveBrushSize = this.brushSize > 0 ? this.brushSize : 0;
     this.ctx.globalCompositeOperation = 'destination-out';
     this.ctx.save();
     this.brush.brush(this.brushImage, effectiveBrushSize);
     this.ctx.restore();
-    this.lastScratchX = this.brush.mouseX;
-    this.lastScratchY = this.brush.mouseY;
-  }
-
-  private resetScratchTrail() {
-    this.lastScratchX = undefined;
-    this.lastScratchY = undefined;
   }
 
   private updatePercent(): number {
