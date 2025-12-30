@@ -5,5 +5,3 @@ declare module 'vue' {
     'scratch-reveal': ComponentPublicInstance;
   }
 }
-
-export {};

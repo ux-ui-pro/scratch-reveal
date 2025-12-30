@@ -6,7 +6,6 @@ export interface ScratchRevealOptions {
   brushSrc: string;
   brushSize: number;
   percentToFinish: number;
-  enabledPercentUpdate: boolean;
   onProgress?: (percent: number) => void;
   onComplete?: () => void;
 }

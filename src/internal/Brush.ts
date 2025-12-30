@@ -16,8 +16,6 @@ export default class Brush {
 
   brush(img: HTMLImageElement, size = 0) {
     if (!img) {
-      const error = new Error('Brush.brush: img is required');
-      console.log(error.message);
       return;
     }
     const angle = Math.atan2(this.mouseY, this.mouseX);

@@ -1,6 +1,6 @@
 import Brush from './internal/Brush';
-import { ScratchRevealOptions } from './options';
 import { loadImage, rafThrottle } from './internal/utils';
+import type { ScratchRevealOptions } from './options';
 import DEFAULT_CSS_TEXT from './scratch-reveal.css?raw';
 
 export const scratchRevealCssText = DEFAULT_CSS_TEXT;
@@ -27,12 +27,11 @@ type ScratchRevealInit = Partial<ScratchRevealOptions>;
 const DEFAULTS: ScratchRevealOptions = {
   width: 300,
   height: 300,
-  brushSrc: '/demo/assets/brush.png',
-  imageMaskSrc: '/demo/assets/scratch-reveal.png',
-  imageBackgroundSrc: '/demo/assets/scratch-reveal-background.svg',
+  brushSrc: '',
+  imageMaskSrc: '',
+  imageBackgroundSrc: '',
   brushSize: 0,
   percentToFinish: 60,
-  enabledPercentUpdate: true,
 };
 
 class ScratchReveal {
@@ -48,7 +47,11 @@ class ScratchReveal {
   private brushSize = 0;
   private percent = 0;
   private done = false;
+  private completing = false;
   private destroyed = false;
+  private lastProgressEmitMs = 0;
+  private lastScratchX?: number;
+  private lastScratchY?: number;
   private removeListeners?: () => void;
 
   get canvas(): HTMLCanvasElement {
@@ -75,6 +78,16 @@ class ScratchReveal {
   }
 
   async init(): Promise<this> {
+    if (!this.config.brushSrc) {
+      throw new Error('ScratchReveal: "brushSrc" is required');
+    }
+    if (!this.config.imageMaskSrc) {
+      throw new Error('ScratchReveal: "imageMaskSrc" is required');
+    }
+    if (!this.config.imageBackgroundSrc) {
+      throw new Error('ScratchReveal: "imageBackgroundSrc" is required');
+    }
+
     const [brush, mask, background] = await Promise.all([
       loadImage(this.config.brushSrc),
       loadImage(this.config.imageMaskSrc),
@@ -133,14 +146,27 @@ class ScratchReveal {
   }
 
   private bindEvents() {
+    const PROGRESS_EMIT_INTERVAL_MS = 120;
+
+    const updatePercentAndMaybeFinishThrottled = rafThrottle(
+      (event: PointerEvent, onPointerMove: (event: PointerEvent) => void) => {
+        this.percent = this.updatePercent();
+        const now = performance.now();
+        if (
+          !this.lastProgressEmitMs ||
+          now - this.lastProgressEmitMs >= PROGRESS_EMIT_INTERVAL_MS
+        ) {
+          this.lastProgressEmitMs = now;
+          this.config.onProgress?.(this.percent);
+        }
+        this.finish(event, onPointerMove);
+      },
+    );
+
     const onPointerMove = rafThrottle((event: PointerEvent) => {
       this.updatePosition(event);
       this.scratch();
-      if (this.config.enabledPercentUpdate) {
-        this.percent = this.updatePercent();
-        this.config.onProgress?.(this.percent);
-      }
-      this.finish(event, onPointerMove);
+      updatePercentAndMaybeFinishThrottled(event, onPointerMove);
     });
 
     const onPointerDown = (event: PointerEvent) => {
@@ -149,15 +175,17 @@ class ScratchReveal {
       this.scratch();
       this._canvas.setPointerCapture(event.pointerId);
       this._canvas.addEventListener('pointermove', onPointerMove);
+      this.resetScratchTrail();
 
-      if (this.config.enabledPercentUpdate) {
-        this.percent = this.updatePercent();
-        this.config.onProgress?.(this.percent);
-      }
+      this.percent = this.updatePercent();
+      this.config.onProgress?.(this.percent);
       this.finish(event, onPointerMove);
     };
 
     const onPointerUp = (event: PointerEvent) => {
+      this.resetScratchTrail();
+      this.percent = this.updatePercent();
+      this.config.onProgress?.(this.percent);
       this.finish(event, onPointerMove);
     };
 
@@ -206,10 +234,31 @@ class ScratchReveal {
 
   private scratch() {
     if (!this.brushImage) return;
+    const sizeBase =
+      this.brushSize > 0
+        ? this.brushSize
+        : Math.max(1, Math.min(this.brushImage.width, this.brushImage.height));
+    const spacing = Math.max(2, sizeBase * 0.4);
+    if (this.lastScratchX !== undefined && this.lastScratchY !== undefined) {
+      const dx = this.brush.mouseX - this.lastScratchX;
+      const dy = this.brush.mouseY - this.lastScratchY;
+      if (dx * dx + dy * dy < spacing * spacing) {
+        return;
+      }
+    }
+
+    const effectiveBrushSize = this.brushSize > 0 ? this.brushSize : 0;
     this.ctx.globalCompositeOperation = 'destination-out';
     this.ctx.save();
-    this.brush.brush(this.brushImage, this.brushSize);
+    this.brush.brush(this.brushImage, effectiveBrushSize);
     this.ctx.restore();
+    this.lastScratchX = this.brush.mouseX;
+    this.lastScratchY = this.brush.mouseY;
+  }
+
+  private resetScratchTrail() {
+    this.lastScratchX = undefined;
+    this.lastScratchY = undefined;
   }
 
   private updatePercent(): number {
@@ -226,9 +275,9 @@ class ScratchReveal {
     if (this.done) return;
     if (this.percent > this.config.percentToFinish) {
       this.done = true;
-      this.clear();
       this._canvas.style.pointerEvents = 'none';
       this.config.onComplete?.();
+      this.playCompleteEffect();
 
       if (event && onPointerMove) {
         try {
@@ -241,6 +290,27 @@ class ScratchReveal {
     }
   }
 
+  private playCompleteEffect() {
+    if (this.destroyed) return;
+    if (this.completing) return;
+    this.completing = true;
+
+    const duration = 350;
+    const easing = 'ease-out';
+
+    this._canvas.style.transition = `opacity ${duration}ms ${easing}`;
+
+    if (!this._canvas.style.opacity) this._canvas.style.opacity = '1';
+
+    requestAnimationFrame(() => {
+      this._canvas.style.opacity = '0';
+      window.setTimeout(() => {
+        if (this.destroyed) return;
+        this.clear();
+      }, duration);
+    });
+  }
+
   clear() {
     this.ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
   }
@@ -249,15 +319,6 @@ class ScratchReveal {
 export function registerScratchRevealElement(tagName = 'scratch-reveal') {
   if (typeof window === 'undefined' || !('customElements' in window)) return;
   if (customElements.get(tagName)) return;
-
-  function parseEnabledPercentUpdate(value: string | null, fallback: boolean): boolean {
-    if (value === null) return fallback;
-    const v = value.trim().toLowerCase();
-    if (v === '') return true;
-    if (v === 'false' || v === '0' || v === 'no' || v === 'off') return false;
-    if (v === 'true' || v === '1' || v === 'yes' || v === 'on') return true;
-    return fallback;
-  }
 
   function parseBrushSizeToPx(
     value: string | null,
@@ -269,15 +330,17 @@ export function registerScratchRevealElement(tagName = 'scratch-reveal') {
     const v = value.trim();
     if (!v) return fallbackPx;
 
-    if (v.endsWith('%')) {
-      const n = Number.parseFloat(v.slice(0, -1));
-      if (!Number.isFinite(n)) return fallbackPx;
-      const basis = Math.min(canvasWidth, canvasHeight);
-      return Math.max(0, (basis * n) / 100);
+    const rawNumber = Number.parseFloat(
+      v.endsWith('%') ? v.slice(0, -1) : v.endsWith('px') ? v.slice(0, -2) : v,
+    );
+    if (!Number.isFinite(rawNumber)) return fallbackPx;
+
+    if (v.endsWith('px')) {
+      return Math.max(0, rawNumber);
     }
 
-    const px = v.endsWith('px') ? Number.parseFloat(v.slice(0, -2)) : Number.parseFloat(v);
-    return Number.isFinite(px) ? Math.max(0, px) : fallbackPx;
+    const basis = Math.min(canvasWidth, canvasHeight);
+    return Math.max(0, (basis * rawNumber) / 100);
   }
 
   class ScratchRevealElement extends HTMLElement {
@@ -286,17 +349,17 @@ export function registerScratchRevealElement(tagName = 'scratch-reveal') {
     private styleEl: HTMLStyleElement | null = null;
     private rebuildScheduled = false;
     private resizeObserver?: ResizeObserver;
+    private lastErrorMessage: string | null = null;
 
     static get observedAttributes() {
       return [
         'width',
         'height',
-        'percent-to-finish',
+        'complete-percent',
         'brush-src',
         'brush-size',
         'mask-src',
         'background-src',
-        'enabled-percent-update',
       ];
     }
 
@@ -357,21 +420,28 @@ export function registerScratchRevealElement(tagName = 'scratch-reveal') {
         ? Number(this.getAttribute('height'))
         : autoHeight || DEFAULTS.height;
       const percentToFinish = Number(
-        this.getAttribute('percent-to-finish') ?? DEFAULTS.percentToFinish,
+        this.getAttribute('complete-percent') ?? DEFAULTS.percentToFinish,
       );
-      const brushSrc = this.getAttribute('brush-src') ?? DEFAULTS.brushSrc;
-      const enabledPercentUpdate = parseEnabledPercentUpdate(
-        this.getAttribute('enabled-percent-update'),
-        DEFAULTS.enabledPercentUpdate,
-      );
+      const brushSrc = (this.getAttribute('brush-src') ?? '').trim();
       const brushSize = parseBrushSizeToPx(
         this.getAttribute('brush-size'),
         width,
         height,
         DEFAULTS.brushSize,
       );
-      const imageMaskSrc = this.getAttribute('mask-src') ?? DEFAULTS.imageMaskSrc;
-      const imageBackgroundSrc = this.getAttribute('background-src') ?? DEFAULTS.imageBackgroundSrc;
+      const imageMaskSrc = (this.getAttribute('mask-src') ?? '').trim();
+      const imageBackgroundSrc = (this.getAttribute('background-src') ?? '').trim();
+
+      const missing: string[] = [];
+      if (!brushSrc) missing.push('brush-src');
+      if (!imageMaskSrc) missing.push('mask-src');
+      if (!imageBackgroundSrc) missing.push('background-src');
+
+      if (missing.length) {
+        const message = `ScratchReveal: missing required attribute(s): ${missing.join(', ')}`;
+        this.renderError(message);
+        return;
+      }
 
       if (hasWidthAttr) this.container.style.width = `${width}px`;
       else this.container.style.width = '100%';
@@ -386,7 +456,6 @@ export function registerScratchRevealElement(tagName = 'scratch-reveal') {
         brushSize,
         imageMaskSrc,
         imageBackgroundSrc,
-        enabledPercentUpdate,
         onProgress: (percent) => {
           this.dispatchEvent(new CustomEvent('progress', { detail: { percent } }));
         },
@@ -395,7 +464,10 @@ export function registerScratchRevealElement(tagName = 'scratch-reveal') {
         },
       });
 
-      this.instance.init();
+      this.instance.init().catch((err) => {
+        const message = err instanceof Error ? err.message : 'ScratchReveal: init failed';
+        this.renderError(message);
+      });
 
       const needsAutoSize = !hasWidthAttr || !hasHeightAttr;
       if (needsAutoSize && 'ResizeObserver' in window) {
@@ -424,12 +496,24 @@ export function registerScratchRevealElement(tagName = 'scratch-reveal') {
         this.resizeObserver = undefined;
       }
     }
+
+    private renderError(message: string) {
+      this.instance?.destroy();
+      this.instance = undefined;
+
+      if (this.lastErrorMessage !== message) {
+        this.lastErrorMessage = message;
+        this.dispatchEvent(new CustomEvent('error', { detail: { message } }));
+      }
+    }
   }
 
   customElements.define(tagName, ScratchRevealElement);
 }
 
-export function installScratchReveal(app: { config: any }) {
+export function installScratchReveal(app: {
+  config: { globalProperties: Record<string, unknown> };
+}) {
   registerScratchRevealElement();
   app.config.globalProperties.$scratchReveal = true;
 }

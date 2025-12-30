@@ -37,9 +37,9 @@ app.mount('#app');
 <scratch-reveal
   width="300"
   height="300"
-  percent-to-finish="60"
+  complete-percent="60"
   brush-src="/demo/assets/brush.png"
-  brush-size="15%"
+  brush-size="15"
   mask-src="/demo/assets/scratch-reveal.png"
   background-src="/demo/assets/scratch-reveal-background.svg"
 ></scratch-reveal>
@@ -51,9 +51,9 @@ app.mount('#app');
 <div style="width: 420px; height: 240px;">
   <scratch-reveal
     style="width: 100%; height: 100%;"
-    percent-to-finish="60"
+    complete-percent="60"
     brush-src="/demo/assets/brush.png"
-    brush-size="12%"
+    brush-size="12"
     mask-src="/demo/assets/scratch-reveal.png"
     background-src="/demo/assets/scratch-reveal-background.svg"
   ></scratch-reveal>
@@ -72,9 +72,13 @@ el.addEventListener('progress', (event) => {
 el.addEventListener('complete', () => {
   console.log('done!');
 });
+el.addEventListener('error', (event) => {
+  console.error(event.detail.message);
+});
 ```
 — `progress` (detail: `{ percent: number }`)  
-— `complete` (detail: `{ percent: 100 }`)
+— `complete` (detail: `{ percent: 100 }`)  
+— `error` (detail: `{ message: string }`)
 
 <br>
 
@@ -83,12 +87,11 @@ el.addEventListener('complete', () => {
 |        Attribute         |        Type        |                   Default                    | Description                                                                                              |
 |:------------------------:|:------------------:|:--------------------------------------------:|:---------------------------------------------------------------------------------------------------------|
 |    `width` / `height`    |      `number`      |                    `300`                     | Container/mask size in px. If omitted, size follows layout (auto-size).                                  |
-|   `percent-to-finish`    |      `number`      |                     `60`                     | Percent cleared to consider done.                                                                        |
-|       `brush-src`        |      `string`      |           `/demo/assets/brush.png`           | Brush image.                                                                                             |
-|       `brush-size`       | `string \| number` |                     `0`                      | Brush width: `80`/`80px` (px) or `12%` (percent of min(canvas width, height)). `0` = natural image size. |
-|        `mask-src`        |      `string`      |      `/demo/assets/scratch-reveal.png`       | Top mask (scratched away).                                                                               |
-|     `background-src`     |      `string`      | `/demo/assets/scratch-reveal-background.svg` | Background beneath the mask.                                                                             |
-| `enabled-percent-update` |     `boolean`      |                    `true`                    | Compute cleared percent (used for `progress` and threshold checks).                                      |
+|   `complete-percent`     |      `number`      |                     `60`                     | Percent cleared to consider done.                                                                        |
+|       `brush-src`        |      `string`      |                    —                         | Brush image (**required**).                                                                              |
+|       `brush-size`       | `string \| number` |                     `0`                      | Brush width: numbers mean percent of min(canvas width, height) (e.g., `12` = 12%). Use `80px` for px. `0` = natural image size. |
+|        `mask-src`        |      `string`      |                    —                         | Top mask (scratched away) (**required**).                                                                |
+|     `background-src`     |      `string`      |                    —                         | Background beneath the mask (**required**).                                                              |
 <br>
 
 ➠ **Styles**

@@ -41,12 +41,12 @@
   </head>
   <body>
     <main class="page">
-      <span class="progress-text">Осталось стереть…</span>
+      <span class="progress-text"></span>
 
       <div class="scratch-wrap">
         <scratch-reveal
-          percent-to-finish="60"
-          brush-size="25%"
+          complete-percent="30"
+          brush-size="35"
           brush-src="/demo/assets/scratch-reveal-brush.png"
           mask-src="/demo/assets/scratch-reveal-mask.webp"
           background-src="/demo/assets/scratch-reveal-background.svg"
@@ -56,20 +56,19 @@
 
     <script type="module">
       import { registerScratchRevealElement } from '/src/scratch-reveal.ts';
-      // import '/src/scratch-reveal.css';
 
       registerScratchRevealElement();
 
       const el = document.querySelector('scratch-reveal');
       const progressText = document.querySelector('.progress-text');
 
-      const percentToFinish = Number(el?.getAttribute('percent-to-finish') ?? 60);
+      const completePercent = Number(el?.getAttribute('complete-percent') ?? 35);
 
       const setRemaining = (clearedPercent) => {
         if (!progressText) return;
-        const remaining = Math.max(0, percentToFinish - clearedPercent);
+        const remaining = Math.max(0, completePercent - clearedPercent);
         const remainingRounded = Math.round(remaining);
-        progressText.textContent = `Осталось стереть ${remainingRounded}%`;
+        progressText.textContent = `${remainingRounded}%`;
       };
 
       setRemaining(0);
@@ -79,8 +78,8 @@
       });
 
       el.addEventListener('complete', () => {
-        setRemaining(percentToFinish);
-        console.log('ScratchReveal: завершено');
+        setRemaining(completePercent);
+        console.log('ScratchReveal: done');
       });
     </script>
   </body>
