@@ -1,6 +1,6 @@
 {
   "name": "scratch-reveal",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Scratch & reveal Web Component: mask + background with brush-only reveal, Vue-friendly, shadow-styled.",
   "author": "ux-ui.pro",
   "license": "MIT",

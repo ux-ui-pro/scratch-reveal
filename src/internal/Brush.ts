@@ -18,7 +18,9 @@ export default class Brush {
     if (!img) {
       return;
     }
+
     const angle = Math.atan2(this.mouseY, this.mouseX);
+
     this.ctx.save();
     this.ctx.translate(this.mouseX, this.mouseY);
     this.ctx.rotate(angle);
@@ -26,6 +28,7 @@ export default class Brush {
     if (size > 0) {
       const width = size;
       const height = size * (img.height / img.width);
+
       this.ctx.drawImage(img, -(width / 2), -(height / 2), width, height);
     } else {
       this.ctx.drawImage(img, -(img.width / 2), -(img.height / 2));
